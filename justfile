@@ -7,7 +7,7 @@ uuid := 'rounded-window-corners@fxgn'
 # Compile the extension and all resources
 build: clean && pot
   # Compile TypeScript
-  npm install
+  npm ci
   npx tsc --outDir {{buildDir}}
 
   # Copy non-JS files

@@ -7,13 +7,14 @@ import type Clutter from 'gi://Clutter';
 
 import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
-import Shell from 'gi://Shell';
+
+import {ShaderEffect} from './shader_effect.js';
 
 export const LinearFilterEffect = GObject.registerClass(
     {},
-    class extends Shell.GLSLEffect {
-        vfunc_build_pipeline() {
-            this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, '', '', false);
+    class extends ShaderEffect {
+        vfunc_get_static_snippet() {
+            return Cogl.Snippet.new(Cogl.SnippetHook.FRAGMENT, '', '');
         }
 
         vfunc_paint_target(node: Clutter.PaintNode, ctx: Clutter.PaintContext) {

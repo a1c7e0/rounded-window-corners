@@ -4,53 +4,42 @@ import type {Bounds, RoundedCornerSettings} from '../utils/types.js';
 
 import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
-import Shell from 'gi://Shell';
 
 import {readShader} from '../utils/file.js';
 import {getPref} from '../utils/settings.js';
+import {ShaderEffect} from './shader_effect.js';
 
 const [declarations, code] = await readShader(
     import.meta.url,
     'shader/rounded_corners.frag',
 );
 
-class Uniforms {
-    bounds = 0;
-    clipRadius = 0;
-    borderWidth = 0;
-    borderColor = 0;
-    borderedAreaBounds = 0;
-    borderedAreaClipRadius = 0;
-    exponent = 0;
-    pixelStep = 0;
-}
+type UniformName =
+    | 'bounds'
+    | 'clipRadius'
+    | 'borderWidth'
+    | 'borderColor'
+    | 'borderedAreaBounds'
+    | 'borderedAreaClipRadius'
+    | 'exponent'
+    | 'pixelStep';
+
+// A WeakMap is safe even if pipeline construction happens during super().
+// Store copies: borderColor comes from mutable settings objects.
+const uploadedUniforms = new WeakMap<
+    InstanceType<typeof ShaderEffect>,
+    Map<UniformName, number[]>
+>();
 
 export const RoundedCornersEffect = GObject.registerClass(
     {},
-    class Effect extends Shell.GLSLEffect {
-        /**
-         * To store a uniform value, we need to know its location in the shader,
-         * which is done by calling `this.get_uniform_location()`. This is
-         * expensive, so we cache the location of uniforms when the shader is
-         * created.
-         */
-        static uniforms: Uniforms = new Uniforms();
-
-        constructor() {
-            super();
-
-            for (const k in Effect.uniforms) {
-                Effect.uniforms[k as keyof Uniforms] =
-                    this.get_uniform_location(k);
-            }
-        }
-
-        vfunc_build_pipeline() {
-            this.add_glsl_snippet(
+    class Effect extends ShaderEffect {
+        vfunc_get_static_snippet() {
+            uploadedUniforms.delete(this);
+            return Cogl.Snippet.new(
                 Cogl.SnippetHook.FRAGMENT,
                 declarations,
                 code,
-                false,
             );
         }
 
@@ -88,22 +77,22 @@ export const RoundedCornersEffect = GObject.registerClass(
             }
 
             const pixelStep = [
-                1 / this.actor.get_width(),
-                1 / this.actor.get_height(),
+                1 / Math.max(1, this.actor.get_width()),
+                1 / Math.max(1, this.actor.get_height()),
             ];
 
             // This is needed for squircle corners
             let exponent = smoothing * 10 + 2;
             let radius = outerRadius * 0.5 * exponent;
-            const maxRadius = Math.min(
-                bounds[3] - bounds[0],
-                bounds[4] - bounds[1],
+            const maxRadius = Math.max(
+                0,
+                Math.min(bounds[2] - bounds[0], bounds[3] - bounds[1]),
             );
             if (radius > maxRadius) {
                 exponent *= maxRadius / radius;
                 radius = maxRadius;
             }
-            borderedAreaRadius *= radius / outerRadius;
+            borderedAreaRadius *= outerRadius > 0 ? radius / outerRadius : 0;
 
             this.#setUniforms(
                 bounds,
@@ -127,22 +116,29 @@ export const RoundedCornersEffect = GObject.registerClass(
             pixelStep: number[],
             exponent: number,
         ) {
-            const uniforms = Effect.uniforms;
-            this.set_uniform_float(uniforms.bounds, 4, bounds);
-            this.set_uniform_float(uniforms.clipRadius, 1, [radius]);
-            this.set_uniform_float(uniforms.borderWidth, 1, [borderWidth]);
-            this.set_uniform_float(uniforms.borderColor, 4, borderColor);
-            this.set_uniform_float(
-                uniforms.borderedAreaBounds,
-                4,
-                borderedAreaBounds,
-            );
-            this.set_uniform_float(uniforms.borderedAreaClipRadius, 1, [
-                borderedAreaRadius,
-            ]);
-            this.set_uniform_float(uniforms.pixelStep, 2, pixelStep);
-            this.set_uniform_float(uniforms.exponent, 1, [exponent]);
-            this.queue_repaint();
+            const values: [UniformName, number[]][] = [
+                ['bounds', bounds],
+                ['clipRadius', [radius]],
+                ['borderWidth', [borderWidth]],
+                ['borderColor', borderColor],
+                ['borderedAreaBounds', borderedAreaBounds],
+                ['borderedAreaClipRadius', [borderedAreaRadius]],
+                ['pixelStep', pixelStep],
+                ['exponent', [exponent]],
+            ];
+            const previous =
+                uploadedUniforms.get(this) ?? new Map<UniformName, number[]>();
+            let changed = false;
+            for (const [name, value] of values) {
+                const oldValue = previous.get(name);
+                if (oldValue?.every((component, i) => component === value[i]))
+                    continue;
+                this.set_uniform_float(name, value.length, value);
+                previous.set(name, [...value]);
+                changed = true;
+            }
+            uploadedUniforms.set(this, previous);
+            if (changed) this.queue_repaint();
         }
     },
 );

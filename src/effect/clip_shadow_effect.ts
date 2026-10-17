@@ -7,9 +7,9 @@
 
 import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
-import Shell from 'gi://Shell';
 
 import {readShader} from '../utils/file.js';
+import {ShaderEffect} from './shader_effect.js';
 
 const [declarations, code] = await readShader(
     import.meta.url,
@@ -18,13 +18,12 @@ const [declarations, code] = await readShader(
 
 export const ClipShadowEffect = GObject.registerClass(
     {},
-    class extends Shell.GLSLEffect {
-        vfunc_build_pipeline() {
-            this.add_glsl_snippet(
+    class extends ShaderEffect {
+        vfunc_get_static_snippet() {
+            return Cogl.Snippet.new(
                 Cogl.SnippetHook.FRAGMENT,
                 declarations,
                 code,
-                false,
             );
         }
     },

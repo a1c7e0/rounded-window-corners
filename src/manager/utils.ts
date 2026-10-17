@@ -21,6 +21,16 @@ import {readFile} from '../utils/file.js';
 import {logDebug} from '../utils/log.js';
 import {getPref} from '../utils/settings.js';
 
+type ShadowStyleSnapshot = {
+    child: St.Bin;
+    actorStyle: string;
+    childStyle: string;
+    values: number[];
+    hidden: boolean;
+};
+
+const shadowStyleSnapshots = new WeakMap<object, ShadowStyleSnapshot>();
+
 /**
  * Get the actor that rounded corners should be applied to.
  * In Wayland, the effect is applied to WindowActor, but in X11, it is applied
@@ -172,16 +182,40 @@ export function updateShadowActorStyle(
     if (globalCfg !== null) {
         adjustedBorderRadius *= 1.0 + globalCfg.smoothing;
     }
-
-    actor.style = `padding: ${SHADOW_PADDING}px;`;
-
     const child = actor.firstChild as St.Bin;
-
+    const actorStyle = `padding: ${SHADOW_PADDING}px;`;
     const hideShadowForMaximizedFullscreen =
         !getPref('keep-shadow-for-maximized-fullscreen') &&
         (win.maximizedHorizontally ||
             win.maximizedVertically ||
             win.fullscreen);
+
+    const values = [
+        adjustedBorderRadius,
+        shadow.horizontalOffset,
+        shadow.verticalOffset,
+        shadow.blurOffset,
+        shadow.spreadRadius,
+        shadow.opacity,
+        top,
+        right,
+        bottom,
+        left,
+    ];
+    const previous = shadowStyleSnapshots.get(actor);
+    const valuesAreFinite = values.every(Number.isFinite);
+    if (
+        valuesAreFinite &&
+        previous?.child === child &&
+        previous.actorStyle === actorStyle &&
+        actor.style === previous.actorStyle &&
+        child.style === previous.childStyle &&
+        previous.hidden === hideShadowForMaximizedFullscreen &&
+        previous.values.length === values.length &&
+        previous.values.every((value, i) => Object.is(value, values[i]))
+    ) {
+        return;
+    }
 
     const newChildStyle = hideShadowForMaximizedFullscreen
         ? 'opacity: 0;'
@@ -193,21 +227,51 @@ export function updateShadowActorStyle(
                        ${bottom}px
                        ${left}px;`;
 
-    // Only update style and queue a redraw when the style actually changed.
+    if (actor.style !== actorStyle) actor.style = actorStyle;
     if (child.style !== newChildStyle) {
         child.style = newChildStyle;
         child.queue_redraw();
     }
+    if (valuesAreFinite) {
+        shadowStyleSnapshots.set(actor, {
+            child,
+            actorStyle,
+            childStyle: newChildStyle,
+            values,
+            hidden: hideShadowForMaximizedFullscreen,
+        });
+    } else {
+        shadowStyleSnapshots.delete(actor);
+    }
+}
+
+/** Update bind constraint offsets only when their numeric values changed. */
+export function updateConstraintOffsets(
+    constraints: ({offset: number} | undefined)[],
+    offsets: number[],
+) {
+    constraints.forEach((constraint, i) => {
+        const offset = offsets[i];
+        if (
+            constraint &&
+            offset !== undefined &&
+            !Object.is(constraint.offset, offset)
+        ) {
+            constraint.offset = offset;
+        }
+    });
 }
 
 /**
  * Check whether a window should have rounded corners.
  *
  * @param win - The window to check.
+ * @param isActive - Whether the caller still owns the window after async work.
  * @returns Whether the window should have rounded corners.
  */
 export async function shouldEnableEffect(
     win: Meta.Window & {_appType?: AppType},
+    isActive = () => true,
 ) {
     // Skip rounded corners for the DING (Desktop Icons NG) extension.
     //
@@ -239,6 +303,7 @@ export async function shouldEnableEffect(
 
     // Skip libhandy/libadwaita applications according to settings.
     const appType = win._appType ?? (await getAppType(win));
+    if (!isActive()) return false;
     win._appType = appType; // Cache the result.
     logDebug(`Check Type of window:${win.wmClass} => ${appType}`);
 
@@ -261,11 +326,9 @@ export async function shouldEnableEffect(
     const maximized = win.maximizedHorizontally || win.maximizedVertically;
     const fullscreen = win.fullscreen;
     const cfg = getRoundedCornersCfg(win);
-    return (
-        !(maximized || fullscreen) ||
-        (maximized && !fullscreen && cfg.keepRoundedCorners.maximized) ||
-        (fullscreen && cfg.keepRoundedCorners.fullscreen)
-    );
+    return fullscreen
+        ? cfg.keepRoundedCorners.fullscreen
+        : !maximized || cfg.keepRoundedCorners.maximized;
 }
 
 /**
@@ -334,6 +397,7 @@ async function withProcMaps<T>(
     successCb: (contents: string) => T,
     errorCb: () => T,
 ) {
+    const windowClass = win.wmClass;
     try {
         const contents = await readFile(`/proc/${win.get_pid()}/maps`);
         return successCb(contents);
@@ -342,7 +406,7 @@ async function withProcMaps<T>(
             e instanceof Gio.IOErrorEnum &&
             e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.PERMISSION_DENIED)
         ) {
-            logDebug(`Permission denied reading /proc maps for ${win.wmClass}`);
+            logDebug(`Permission denied reading /proc maps for ${windowClass}`);
         } else {
             logError(e);
         }

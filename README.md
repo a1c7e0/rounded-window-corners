@@ -12,6 +12,20 @@
 > [!NOTE]
 > This is the fork of the [original rounded-window-corners extension](https://github.com/yilozt/rounded-window-corners) by @yilozt, which is no longer maintained.
 
+## GNOME 51 fork
+
+This fork targets **GNOME Shell 51**. It ports all three custom effects from
+removed `Shell.GLSLEffect` to `Clutter.ShaderEffect`, and reduces repeated
+settings decoding, uniform uploads, shadow styling and geometry updates.
+
+The **Improve overview preview scaling** switch under **Tweaks** controls the
+extra preview filter. It defaults to on; disable it to reduce rendering work,
+then close and reopen Overview to compare the result.
+
+See [GNOME 51 validation and installation](GNOME51.md) for tested scenarios,
+limitations and installation instructions. Upstream Extensions/AUR packages do
+not contain this fork's changes.
+
 ## Installation
 
 ### From Gnome Extensions
@@ -24,7 +38,7 @@ If you want to install the latest commit of the extension, you can get a
 pre-built archive from GitHub Actions.
 
 1. Sign in to GitHub.
-2. Go to [the build action page](https://github.com/flexagoon/rounded-window-corners/actions/workflows/build.yml)
+2. Go to [the build action page](https://github.com/a1c7e0/rounded-window-corners/actions/workflows/build.yml)
 3. Click on the latest workflow run
 4. Download the extension from the "artifacts" section at the bottom
 5. Install it with the `gnome-extensions install` command
@@ -43,7 +57,7 @@ pre-built archive from GitHub Actions.
 2. Build the extension
 
     ```bash
-    git clone https://github.com/flexagoon/rounded-window-corners
+    git clone https://github.com/a1c7e0/rounded-window-corners
     cd rounded-window-corners
     just install
     ```

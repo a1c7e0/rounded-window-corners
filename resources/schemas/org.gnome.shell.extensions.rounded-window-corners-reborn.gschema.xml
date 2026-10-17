@@ -112,5 +112,10 @@
     <key name="tweak-kitty-terminal" type="b">
       <default>false</default>
     </key>
+
+    <key name="overview-linear-filter" type="b">
+      <summary>Improve overview preview scaling</summary>
+      <default>true</default>
+    </key>
   </schema>
 </schemalist>

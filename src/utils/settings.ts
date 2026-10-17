@@ -28,6 +28,7 @@ type Schema = {
     'unfocused-shadow': BoxShadow;
     'keep-shadow-for-maximized-fullscreen': boolean;
     'debug-mode': boolean;
+    'overview-linear-filter': boolean;
     'tweak-kitty-terminal': boolean;
 };
 
@@ -48,24 +49,52 @@ export const Schema = {
     'unfocused-shadow': 'a{si}',
     'keep-shadow-for-maximized-fullscreen': 'b',
     'debug-mode': 'b',
+    'overview-linear-filter': 'b',
     'tweak-kitty-terminal': 'b',
 };
 
 /** The raw GSettings object for direct manipulation. */
 export let prefs: Gio.Settings;
 
+// Only the Shell runtime opts in: preference pages edit unpacked objects in
+// place, so they must continue receiving independent values on every read.
+const cachedValues = new Map<SchemaKey, Schema[SchemaKey]>();
+let cacheEnabled = false;
+let cacheConnection: number | null = null;
+
 /**
  * Initialize the {@link prefs} object with existing GSettings.
  *
  * @param gSettings - GSettings to initialize the prefs with.
+ * @param options - Enable caching for callers that treat settings as read-only.
  */
-export function initPrefs(gSettings: Gio.Settings) {
+export function initPrefs(
+    gSettings: Gio.Settings,
+    options: {cache?: boolean} = {},
+) {
+    uninitPrefs();
     resetOutdated(gSettings);
     prefs = gSettings;
+    cacheEnabled = options.cache ?? false;
+    if (cacheEnabled) {
+        // Connect before the effect manager, so observers always see fresh data.
+        cacheConnection = prefs.connect(
+            'changed',
+            (_settings, key: SchemaKey) => {
+                cachedValues.delete(key);
+            },
+        );
+    }
 }
 
 /** Delete the {@link prefs} object for garbage collection. */
 export function uninitPrefs() {
+    if (cacheConnection !== null) {
+        prefs.disconnect(cacheConnection);
+        cacheConnection = null;
+    }
+    cachedValues.clear();
+    cacheEnabled = false;
     (prefs as Gio.Settings | null) = null;
 }
 
@@ -77,7 +106,12 @@ export function uninitPrefs() {
  * @returns The value of the preference.
  */
 export function getPref<K extends SchemaKey>(key: K) {
-    return prefs.get_value(key).recursiveUnpack() as Schema[K];
+    if (cacheEnabled && cachedValues.has(key)) {
+        return cachedValues.get(key) as Schema[K];
+    }
+    const value = prefs.get_value(key).recursiveUnpack() as Schema[K];
+    if (cacheEnabled) cachedValues.set(key, value);
+    return value;
 }
 
 /**
@@ -101,6 +135,8 @@ export function setPref<K extends SchemaKey>(key: K, value: Schema[K]) {
         variant = new GLib.Variant(Schema[key], value);
     }
 
+    // Also invalidate writes immediately if the changed signal is deferred.
+    cachedValues.delete(key);
     prefs.set_value(key, variant);
 }
 

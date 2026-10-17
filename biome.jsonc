@@ -90,6 +90,20 @@
             }
         }
     },
+    "overrides": [
+        {
+            "includes": ["tests/**/*.mjs"],
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noNodejsModules": "off",
+                        "useQwikValidLexicalScope": "off"
+                    },
+                    "style": { "useNamingConvention": "off" }
+                }
+            }
+        }
+    ],
     "formatter": {
         "indentStyle": "space",
         "indentWidth": 4

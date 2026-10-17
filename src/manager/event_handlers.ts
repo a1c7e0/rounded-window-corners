@@ -11,6 +11,7 @@ import St from 'gi://St';
 
 import {ClipShadowEffect} from '../effect/clip_shadow_effect.js';
 import {RoundedCornersEffect} from '../effect/rounded_corners_effect.js';
+import {getActorLifetime} from '../utils/actor_lifetime.js';
 import {
     CLIP_SHADOW_EFFECT,
     ROUNDED_CORNERS_EFFECT,
@@ -27,6 +28,7 @@ import {
     isChromium,
     shouldEnableEffect,
     unwrapActor,
+    updateConstraintOffsets,
     updateShadowActorStyle,
 } from './utils.js';
 
@@ -38,19 +40,28 @@ function withActorLock(
     actor: RoundedWindowActor,
     fn: () => Promise<void>,
 ): Promise<void> {
+    const lifetime = getActorLifetime(actor);
+    function run() {
+        return lifetime?.active ? fn() : Promise.resolve();
+    }
     const prev: Promise<void> | undefined = actor.rwcLock;
-    const next = prev ? prev.then(fn, fn) : fn();
+    const next = prev ? prev.then(run, run) : run();
     actor.rwcLock = next;
     return next;
 }
 
 export function onAddEffect(actor: RoundedWindowActor) {
+    const lifetime = getActorLifetime(actor);
     return withActorLock(actor, async () => {
         logDebug(`Adding effect to ${actor?.metaWindow.wmClass}`);
         const win = actor.metaWindow;
 
         // Skip windows that already have the effect to prevent a memory leak
-        const shouldHaveEffect = await shouldEnableEffect(win);
+        const shouldHaveEffect = await shouldEnableEffect(
+            win,
+            () => lifetime?.active === true,
+        );
+        if (!lifetime?.active) return;
         const effect = getRoundedCornersEffect(actor);
         const hasEffect = effect && actor.rwcCustomData;
 
@@ -149,6 +160,8 @@ export function onMinimize(actor: RoundedWindowActor) {
 }
 
 export async function onUnminimize(actor: RoundedWindowActor) {
+    const lifetime = getActorLifetime(actor);
+    if (!lifetime?.active) return;
     // Compatibility with "Compiz alike magic lamp effect".
     // When unminimizing a window, wait until the effect is completed before
     // showing the shadow.
@@ -180,6 +193,7 @@ export async function onUnminimize(actor: RoundedWindowActor) {
     // See https://github.com/flexagoon/rounded-window-corners/issues/124
     if (
         (await isChromium(actor.metaWindow)) &&
+        lifetime.active &&
         actor.rwcCustomData !== undefined
     ) {
         const oldTimeout = actor.rwcCustomData.unminimizedTimeoutId;
@@ -188,7 +202,10 @@ export async function onUnminimize(actor: RoundedWindowActor) {
             GLib.PRIORITY_DEFAULT,
             250,
             () => {
-                refreshRoundedCorners(actor);
+                if (lifetime.active && actor.rwcCustomData) {
+                    actor.rwcCustomData.unminimizedTimeoutId = 0;
+                    refreshRoundedCorners(actor);
+                }
                 return GLib.SOURCE_REMOVE;
             },
         );
@@ -275,10 +292,15 @@ function refreshShadow(actor: RoundedWindowActor) {
  * @param actor - The window actor to refresh the rounded corners settings for.
  */
 function refreshRoundedCorners(actor: RoundedWindowActor) {
+    const lifetime = getActorLifetime(actor);
     return withActorLock(actor, async () => {
         const win = actor.metaWindow;
 
-        const shouldHaveEffect = await shouldEnableEffect(win);
+        const shouldHaveEffect = await shouldEnableEffect(
+            win,
+            () => lifetime?.active === true,
+        );
+        if (!lifetime?.active) return;
 
         const windowInfo = (actor as RoundedWindowActor).rwcCustomData;
         const effect = getRoundedCornersEffect(actor);
@@ -332,11 +354,14 @@ function updateEffect(actor: RoundedWindowActor) {
     const shadow = windowInfo.shadow;
     const offsets = computeShadowActorOffset(windowContentOffset);
     const constraints = shadow.get_constraints();
-    constraints.forEach((constraint, i) => {
-        if (constraint instanceof Clutter.BindConstraint) {
-            constraint.offset = offsets[i];
-        }
-    });
+    updateConstraintOffsets(
+        constraints.map(constraint =>
+            constraint instanceof Clutter.BindConstraint
+                ? constraint
+                : undefined,
+        ),
+        offsets,
+    );
 
     refreshShadow(actor);
 }

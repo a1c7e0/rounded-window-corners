@@ -159,6 +159,12 @@
       <object class="AdwPreferencesGroup">
         <property name="title" translatable="yes">Tweaks</property>
         <child>
+          <object class="AdwSwitchRow" id="overviewLinearFilter">
+            <property name="title" translatable="yes">Improve overview preview scaling</property>
+            <property name="subtitle" translatable="yes">Disabling reduces rendering work and may affect sharpness. Applies when the Overview is opened again.</property>
+          </object>
+        </child>
+        <child>
           <object class="AdwSwitchRow" id="tweakKitty">
             <property name="title" translatable="yes">Add rounded corners to Kitty Terminal on Wayland</property>
             <property name="subtitle" translatable="yes">Adjust paddings for Kitty Terminal to correctly round its corners</property>

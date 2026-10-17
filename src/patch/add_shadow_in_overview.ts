@@ -11,19 +11,18 @@ import Graphene from 'gi://Graphene';
 import {overview} from 'resource:///org/gnome/shell/ui/main.js';
 
 import {LinearFilterEffect} from '../effect/linear_filter_effect.js';
-import {shouldEnableEffect} from '../manager/utils.js';
+import {getRoundedCornersEffect} from '../manager/utils.js';
+import {getActorLifetime} from '../utils/actor_lifetime.js';
 import {OVERVIEW_SHADOW_ACTOR, SHADOW_PADDING} from '../utils/constants.js';
 import {logDebug} from '../utils/log.js';
+import {getPref} from '../utils/settings.js';
 
 /**
  * Add a shadow actor to a window preview in the overview.
  * @param window - The window that the preview is of.
  * @param self - The window preview that the shadow actor is added to.
  */
-export async function addShadowInOverview(
-    window: Meta.Window,
-    self: WindowPreview,
-) {
+export function addShadowInOverview(window: Meta.Window, self: WindowPreview) {
     // Skip attached dialogs — they are added via _updateAttachedDialogs/addDialog
     // and should not get their own shadow clone in the overview.
     // We detect them by checking if the window is transient-for another window,
@@ -34,10 +33,11 @@ export async function addShadowInOverview(
 
     // If the original window doesn't have rounded corners or a shadow,
     // we don't need to do anything, so we can skip it.
-    const hasRoundedCorners = await shouldEnableEffect(window);
-    const windowActor = window.get_compositor_private() as RoundedWindowActor;
+    const windowActor =
+        window.get_compositor_private() as RoundedWindowActor | null;
+    if (!(windowActor && getActorLifetime(windowActor)?.active)) return;
     const shadow = windowActor.rwcCustomData?.shadow;
-    if (!(hasRoundedCorners && shadow)) {
+    if (!(shadow && getRoundedCornersEffect(windowActor)?.enabled)) {
         return;
     }
 
@@ -49,7 +49,9 @@ export async function addShadowInOverview(
     // Apply linear interpolation to the window preview to make it look
     // better (there's an upstream GNOME bug causing windows to be blurry,
     // this makes the effect less noticeable)
-    windowContainer.firstChild?.add_effect(new LinearFilterEffect());
+    if (getPref('overview-linear-filter')) {
+        windowContainer.firstChild?.add_effect(new LinearFilterEffect());
+    }
 
     // Create a clone of the window's shadow actor and add it to the preview
     const shadowActorClone = new OverviewShadowActorClone(shadow, self);
@@ -109,9 +111,10 @@ const OverviewShadowActorClone = GObject.registerClass(
 
             // Scale the shadow by the same scale factor that the window preview
             // is scaled by.
+            const frameWidth = metaWindow.get_frame_rect().width;
+            if (frameWidth <= 0) return;
             const containerScaleFactor =
-                windowContainerBox.get_width() /
-                metaWindow.get_frame_rect().width;
+                windowContainerBox.get_width() / frameWidth;
             const paddings = SHADOW_PADDING * containerScaleFactor;
 
             // Setup the bounding box of the shadow actor.
