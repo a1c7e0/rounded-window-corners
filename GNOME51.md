@@ -52,10 +52,21 @@ multi-monitor rendering or a specific percentage speedup.
 
 ## Install
 
+This fork is maintained by **a1c7e0** and uses the UUID
+`rounded-window-corners@a1c7e0`. When migrating from the upstream UUID, disable
+it first so the two variants do not run together:
+
+```sh
+gnome-extensions disable rounded-window-corners@fxgn
+```
+
+Existing preferences are retained because the settings schema and path are
+unchanged. The upstream gettext domain is retained for existing translations.
+
 Install a built extension ZIP from this fork:
 
 ```sh
-gnome-extensions install --force /absolute/path/rounded-window-corners@fxgn.shell-extension.zip
+gnome-extensions install --force /absolute/path/rounded-window-corners@a1c7e0.shell-extension.zip
 ```
 
 Or build and install from this repository, with Node.js, npm, gettext and just:
@@ -64,13 +75,13 @@ Or build and install from this repository, with Node.js, npm, gettext and just:
 just install
 ```
 
-This writes to `~/.local/share/gnome-shell/extensions/rounded-window-corners@fxgn`.
+This writes to `~/.local/share/gnome-shell/extensions/rounded-window-corners@a1c7e0`.
 Log out and back in before enabling the new version, particularly when another
 version was loaded earlier in the same session: GJS keeps registered classes
 and imported modules in memory even after uninstalling files.
 
 ```sh
-gnome-extensions enable rounded-window-corners@fxgn
+gnome-extensions enable rounded-window-corners@a1c7e0
 ```
 
 The extra filter defaults to on to preserve the appearance. Disable **Improve

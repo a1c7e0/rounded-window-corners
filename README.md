@@ -14,7 +14,8 @@
 
 ## GNOME 51 fork
 
-This fork targets **GNOME Shell 51**. It ports all three custom effects from
+This fork is maintained by **a1c7e0**, uses the UUID
+`rounded-window-corners@a1c7e0`, and targets **GNOME Shell 51**. It ports all three custom effects from
 removed `Shell.GLSLEffect` to `Clutter.ShaderEffect`, and reduces repeated
 settings decoding, uniform uploads, shadow styling and geometry updates.
 

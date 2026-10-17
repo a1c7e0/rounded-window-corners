@@ -38,6 +38,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rounded-window-corners@fxgn.shell-extension
+          name: rounded-window-corners@a1c7e0.shell-extension
           path: _build/
           compression-level: 9

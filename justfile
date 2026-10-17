@@ -2,7 +2,8 @@
 set shell := ['bash', '-O', 'globstar', '-c']
 
 buildDir := './_build'
-uuid := 'rounded-window-corners@fxgn'
+uuid := 'rounded-window-corners@a1c7e0'
+gettextDomain := 'rounded-window-corners@fxgn'
 
 # Compile the extension and all resources
 build: clean && pot
@@ -35,22 +36,22 @@ clean:
 # Update and compile the translation files
 pot:
   xgettext --from-code=UTF-8 \
-           --output=po/{{uuid}}.pot \
+           --output=po/{{gettextDomain}}.pot \
            src/**/*.ui
 
   xgettext --from-code=UTF-8 \
-           --output=po/{{uuid}}.pot \
+           --output=po/{{gettextDomain}}.pot \
            --language=JavaScript \
            --join-existing \
            src/**/*.ts
 
   for file in po/*.po; do \
-    msgmerge -q -U --backup=off $file po/{{uuid}}.pot; \
+    msgmerge -q -U --backup=off $file po/{{gettextDomain}}.pot; \
   done;
 
   for file in po/*.po; do \
     locale=$(basename $file .po); \
     dir="{{buildDir}}/locale/$locale/LC_MESSAGES"; \
     mkdir -p $dir; \
-    msgfmt -o $dir/{{uuid}}.mo $file; \
+    msgfmt -o $dir/{{gettextDomain}}.mo $file; \
   done;
